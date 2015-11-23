@@ -1,0 +1,95 @@
+---
+title: "Practical Machine Learning Project"
+author: "Eric Hansen"
+date: "Sunday, November 22, 2015"
+output: html_document
+---
+#Introduction
+This document attempts to estimate how subjects are performing a variety of different exercises using movement and acceleration readings from devices worn on the subjects' belt, forearm, arm and the dumbbell they are using.
+
+#Load Data and Libraries
+First, lets load the dataset and all relevant R packages we will need to use. We will be using the "caret" package to build our model.
+
+```{r cache=TRUE}
+set.seed(1015)
+library(caret)
+data<-read.csv("C:/Users/Eric/Desktop/Coursera/pml-training.csv")
+```
+
+Each entry in the dataset is comprised of some information on the subject, the start and end time of the exercise, and then a large number of metrics gathered from each device worn by the subject. The last value is a factor variable labeled "classe" and that is the value the model this document is outlining will try and estimate.
+
+
+#Cleaning Data
+Running a summary function on the dataset we can see that there are a large number of variables that are either missing, or contain errors such as '#DIV/0'. (To avoid cluttering the document I will be posting the summary output in the appendix of the document.)
+
+We can check which columns have very little variability in their values and remove them from our dataset. Because these values have little variability in their values we do not expect them to offer any explanation on the values we are trying to estimate. 
+
+In addition to the columns with little variability, we want to remove columns that are comprised mostly of missing values.
+
+Lastly, we will also remove the first 6 columns of the dataset containing subject information that is not relevant to the estimating the "classe" variable.
+
+```{r cache=TRUE}
+#returns list of variables with very little variability and therefore are unlikely to have much predictive value and then removes them from the dataset.
+data_scrub<-data[,-nearZeroVar(data)]
+
+#removes columns that are comprised of over 50% missing values
+data_scrub<-data_scrub[,colSums(is.na(data_scrub))<nrow(data_scrub)/2]
+
+#removes subject information
+data_scrub<-data_scrub[,-c(1:6)]
+```
+
+#Training and Testing Datasets
+
+Now that we've removed the columns that won't be relevant to our model, we can separate the dataset into two sets, a testing and a training set. We will keep 60% of the observations in the training set while setting aside the remaining 40% to be used to calculate how accurate the model is while avoiding "over-fitting" the model to one dataset.
+
+```{r cache=TRUE}
+#separate training and testing datasets
+inTrain<-createDataPartition(data_scrub$classe, p=0.6, list=FALSE)
+training<-data_scrub[inTrain,]
+testing<-data_scrub[-inTrain,]
+```
+
+#Model Creation
+
+Because the "classe" variable we are trying to estimate is a categorical variable we will be using a random forest model to estimate which category each observation belongs to.
+
+Furthermore a quick look at the summary statement (posted in the appendix) shows that some variables cover a large range of values while others are much more concentrated. Because of this we will want to use PCA pre-processing on our dataset before calculating the model. Both of these steps can be accomplished using the caret "train" function.
+
+Lastly, we also would like to use 10 k-fold cross validation in our model to include another layer of training/testing model creation to hopefully ensure as accurate a model as possible.
+
+```{r cache=TRUE}
+#train statement used to generate model based on training data set. utilizes random forest method while using PCA to preprocess the data
+modFit<-train(training$classe ~.,data=training, method = "rf", preProcess = "pca",trControl=trainControl(method="cv", allowParallel=TRUE))
+```
+
+#Testing The Model
+
+Now that we've created our model, let's use it on the testing dataset we created earlier and see how accurate our model is.
+
+Using the "predict" function from the caret package we can run our model on the testing dataset to calculate an estimated "classe" value for each observation. Then, we can compare the estimated values to the actual values in a confusion matrix to see how accurate our model is.
+
+```{r cache=TRUE}
+#use predict function to test 
+modTest<-predict(modFit, testing)
+
+#check accuracy of prediction
+matrix<-confusionMatrix(modTest, testing$classe)
+
+matrix
+```
+
+```{r cache=TRUE,echo=FALSE}
+             
+plot<-ggplot(as.data.frame(matrix$table))+geom_tile(aes(x=Reference, y=Prediction, fill=Freq)) + scale_fill_gradient(low="white", high="black") + ggtitle("Testing Data Confusion Matrix")
+             
+plot(plot)
+```
+
+We can see that our model accurately predicted the classe value for 96.88% of observations in the testing set.
+
+#Appendix
+
+```{r cache=TRUE}
+summary(data)
+```
